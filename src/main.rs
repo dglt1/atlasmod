@@ -42,7 +42,7 @@ struct AtlasTxnSenderEnv {
     leader_offset: Option<i64>,
     txn_sender_threads: Option<usize>,
     max_txn_send_retries: Option<usize>,
-    txn_send_retry_interval: Option<usize>,
+    txn_send_retry_interval: Option<f64>,
     max_retry_queue_size: Option<usize>,
 }
 
@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
         num_leaders,
         leader_offset,
     ));
-    let txn_send_retry_interval_seconds = env.txn_send_retry_interval.unwrap_or(2);
+    let txn_send_retry_interval_seconds = env.txn_send_retry_interval.unwrap_or(2.0);
     let txn_sender = Arc::new(TxnSenderImpl::new(
         leader_tracker,
         transaction_store.clone(),

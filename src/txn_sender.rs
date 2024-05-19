@@ -41,7 +41,7 @@ pub struct TxnSenderImpl {
     connection_cache: Arc<ConnectionCache>,
     solana_rpc: Arc<dyn SolanaRpc>,
     txn_sender_runtime: Arc<Runtime>,
-    txn_send_retry_interval_seconds: usize,
+    txn_send_retry_interval_seconds: f64,
     max_retry_queue_size: Option<usize>,
 }
 
@@ -52,7 +52,7 @@ impl TxnSenderImpl {
         connection_cache: Arc<ConnectionCache>,
         solana_rpc: Arc<dyn SolanaRpc>,
         txn_sender_threads: usize,
-        txn_send_retry_interval_seconds: usize,
+        txn_send_retry_interval_seconds: f64,
         max_retry_queue_size: Option<usize>,
     ) -> Self {
         let txn_sender_runtime = Builder::new_multi_thread()
@@ -169,7 +169,7 @@ impl TxnSenderImpl {
                     let _ = transaction_store.remove_transaction(signature);
                     statsd_count!("transactions_reached_max_retries", 1);
                 }
-                sleep(Duration::from_secs(txn_send_retry_interval_seconds as u64)).await;
+                sleep(Duration::from_secs_f64(txn_send_retry_interval_seconds)).await;
             }
         });
     }
