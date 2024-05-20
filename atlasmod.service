@@ -1,0 +1,16 @@
+   #copy to /etc/systemd/system/atlasmod.service
+   
+   [Unit]
+   Description=AtlasMod Launch Script
+   After=solana-validator.service
+
+   [Service]
+   User=solana
+   WorkingDirectory=/home/solana/atlasmod
+   ExecStart=/home/solana/atlasmod/launch.sh
+   Restart=on-failure
+   StandardOutput=append:/home/solana/atlasmod.log
+   StandardError=inherit
+
+   [Install]
+   WantedBy=multi-user.target

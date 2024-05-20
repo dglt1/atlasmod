@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Load Cargo environment
+. "$HOME/.cargo/env"
+
 # Environment variables
 export IDENTITY_KEYPAIR_FILE=/home/solana/atlasmod/atlas-keypair.json
 export GRPC_URL=http://localhost:10001
@@ -9,10 +12,10 @@ export TPU_CONNECTION_POOL_SIZE=10
 #export X_TOKEN=
 export NUM_LEADERS=8
 #export LEADER_OFFSET=3
-export TXN_SENDER_THREADS=900
-export MAX_TXN_SEND_RETRIES=15
+export TXN_SENDER_THREADS=1500
+export MAX_TXN_SEND_RETRIES=10
 export TXN_SEND_RETRY_INTERVAL=0.5
-export MAX_RETRY_QUEUE_SIZE=100
+export MAX_RETRY_QUEUE_SIZE=1000
 
 # Logging and metrics (doesnt seem to work)
 export RUST_LOG=info
