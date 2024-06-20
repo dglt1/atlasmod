@@ -7,7 +7,8 @@ use solana_sdk::transaction::{self, VersionedTransaction};
 use std::{
     fs::File,
     io::{self, BufRead},
-    rand::{thread_rng, Rng, seq::SliceRandom},
+    rand::{thread_rng, Rng},
+    rand::seq::SliceRandom,
     sync::Arc,
     time::{Duration, Instant},
 };
