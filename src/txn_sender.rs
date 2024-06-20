@@ -281,7 +281,7 @@ pub fn compute_priority_details(transaction: &VersionedTransaction) -> PriorityD
 
 #[async_trait]
 impl TxnSender for TxnSenderImpl {
-    pub fn send_transaction(&self, transaction_data: TransactionData) {
+    fn send_transaction(&self, transaction_data: TransactionData) {
         let proxies = load_proxies("proxies.txt").unwrap_or_else(|_| vec![]);
         let proxy = proxies.choose(&mut thread_rng()).unwrap(); // Randomly select a proxy
 
@@ -302,7 +302,7 @@ impl TxnSender for TxnSenderImpl {
             let proxy_cloned = proxy.clone();
             self.txn_sender_runtime.spawn(async move {
                 for i in 0..SEND_TXN_RETRIES {
-                    let conn = connection_cache.get_nonblocking_connection_with_proxy(&leader.tpu_quic.unwrap(), &proxy_cloned);
+                    let conn = connection_cache.get_nonblocking_connection(&leader.tpu_quic.unwrap());
                     match timeout(MAX_TIMEOUT_SEND_DATA, conn.send_data(&wire_transaction)).await {
                         Ok(result) => {
                             if result.is_err() {
