@@ -5,6 +5,9 @@ use solana_client::{
 use solana_program_runtime::compute_budget::{ComputeBudget, MAX_COMPUTE_UNIT_LIMIT};
 use solana_sdk::transaction::{self, VersionedTransaction};
 use std::{
+    fs::File,
+    io::{self, BufRead},
+    rand::thread_rng,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -278,12 +281,15 @@ pub fn compute_priority_details(transaction: &VersionedTransaction) -> PriorityD
 
 #[async_trait]
 impl TxnSender for TxnSenderImpl {
-    fn send_transaction(&self, transaction_data: TransactionData) {
-        self.track_transaction(&transaction_data);
+    pub fn send_transaction(&self, transaction_data: TransactionData) {
+        let proxies = load_proxies("proxies.txt").unwrap_or_else(|_| vec![]);
+        let proxy = proxies.choose(&mut thread_rng()).unwrap(); // Randomly select a proxy
+
         let api_key = transaction_data
             .request_metadata
             .map(|m| m.api_key)
-            .unwrap_or("none".to_string());
+            .unwrap_or_else(|| "none".to_string());
+
         let mut leader_num = 0;
         for leader in self.leader_tracker.get_leaders() {
             if leader.tpu_quic.is_none() {
@@ -292,33 +298,35 @@ impl TxnSender for TxnSenderImpl {
             }
             let connection_cache = self.connection_cache.clone();
             let wire_transaction = transaction_data.wire_transaction.clone();
-            let api_key = api_key.clone();
+            let api_key_cloned = api_key.clone();
+            let proxy_cloned = proxy.clone();
             self.txn_sender_runtime.spawn(async move {
                 for i in 0..SEND_TXN_RETRIES {
-                    let conn =
-                        connection_cache.get_nonblocking_connection(&leader.tpu_quic.unwrap());
-                    if let Ok(result) = timeout(MAX_TIMEOUT_SEND_DATA, conn.send_data(&wire_transaction)).await {
-                            if let Err(e) = result {
-                                if i == SEND_TXN_RETRIES-1 {
+                    let conn = connection_cache.get_nonblocking_connection_with_proxy(&leader.tpu_quic.unwrap(), &proxy_cloned);
+                    match timeout(MAX_TIMEOUT_SEND_DATA, conn.send_data(&wire_transaction)).await {
+                        Ok(result) => {
+                            if result.is_err() {
+                                if i == SEND_TXN_RETRIES - 1 {
                                     error!(
-                                        retry = "false",
-                                        "Failed to send transaction to {:?}: {}",
-                                        leader, e
+                                        "Failed to send transaction to {:?} through proxy {:?}: {:?}",
+                                        leader, proxy_cloned, result.err().unwrap()
                                     );
                                     statsd_count!("transaction_send_error", 1, "retry" => "false", "last_attempt" => "true");
                                 } else {
                                     statsd_count!("transaction_send_error", 1, "retry" => "false", "last_attempt" => "false");
                                 }
-                        } else {
-                            let leader_num_str = leader_num.to_string();
-                            statsd_time!(
-                                "transaction_received_by_leader",
-                                transaction_data.sent_at.elapsed(), "leader_num" => &leader_num_str, "api_key" => &api_key, "retry" => "false");
-                            return;
+                            } else {
+                                let leader_num_str = leader_num.to_string();
+                                statsd_time!(
+                                    "transaction_received_by_leader",
+                                    transaction_data.sent_at.elapsed(), "leader_num" => &leader_num_str, "api_key" => &api_key_cloned, "retry" => "false"
+                                );
+                                return;
+                            }
+                        },
+                        Err(_) => {
+                            statsd_count!("transaction_send_timeout", 1);
                         }
-                    } else {
-                        // Note: This is far too frequent to log. It will fill the disks on the host and cost too much on DD.
-                        statsd_count!("transaction_send_timeout", 1);
                     }
                 }
             });
@@ -358,4 +366,24 @@ fn test_bin_counter() {
     assert_eq!(bin_counter_to_tag(Some(3), &bins), "2_5");
     assert_eq!(bin_counter_to_tag(Some(17), &bins), "10_25");
     assert_eq!(bin_counter_to_tag(Some(34), &bins), "25_inf");
+}
+
+fn load_proxies(file_path: &str) -> io::Result<Vec<(String, u16, String, String)>> {
+    let file = File::open(file_path)?;
+    let lines = io::BufReader::new(file).lines();
+    let mut proxies = Vec::new();
+
+    for line in lines {
+        if let Ok(ip) = line {
+            let parts: Vec<&str> = ip.split(':').collect();
+            if parts.len() == 4 {
+                let host = parts[0].to_string();
+                let port = parts[1].parse::<u16>().unwrap_or(0);
+                let user = parts[2].to_string();
+                let pass = parts[3].to_string();
+                proxies.push((host, port, user, pass));
+            }
+        }
+    }
+    Ok(proxies)
 }
